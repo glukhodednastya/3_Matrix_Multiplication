@@ -1,4 +1,4 @@
-# 3_Matrix_Multiplication
+# 3 Matrix Multiplication
 
 Подробнее про метод можно прочитать [здесь](https://ru.wikipedia.org/wiki/Алгоритм_умножения_матриц#Алгоритм_Разделяй-и-властвуй).
 
