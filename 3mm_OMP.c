@@ -1,7 +1,5 @@
 #include <omp.h>
-
 #include "3mm.h"
-
 #include "funcs.h"
 
 void add(int nl, int nr, double A[ nl][nr], double Res[nl][nr]) {
