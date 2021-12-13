@@ -1,6 +1,6 @@
-#include <omp.h>
+#include <mpi.h>
 #include "3mm.h"
-#include "general_funcs.h"
+#include "funcs.h"
 
 void add(int nl, int nr, double A[ nl][nr], double Res[nl][nr]) {
   for (int i = 0; i < nl; ++i) {
@@ -25,7 +25,6 @@ void usual_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], do
     }
   }
 }
-
 
 void block_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], double Res[nl][nr]) {
   int A_ln_size = 200;
@@ -86,10 +85,10 @@ void kernel_3mm_bl(int ni, int nj, int nk, int nl, int nm,
                    double B[ nk][nj], double F[ nj][nl],
                    double C[ nj][nm], double D[ nm][nl],
                    double G[ ni][nl]) {
+  
   block_mult(ni, nk, nj, A, B, E);
   block_mult(nj, nm, nl, C, D, F);
   block_mult(ni, nj, nl, E, F, G);
-
 }
 
 int main(int argc, char** argv) {
@@ -107,21 +106,92 @@ int main(int argc, char** argv) {
   double (*D)[nm][nl]; D = (double(*)[nm][nl])malloc ((nm) * (nl) * sizeof(double));
   double (*G)[ni][nl]; G = (double(*)[ni][nl])malloc ((ni) * (nl) * sizeof(double));
 
-  init_array (ni, nj, nk, nl, nm, *A, *B, *C, *D);
-  bench_timer_start();
-  kernel_3mm_bl (ni, nj, nk, nl, nm, *E, *A, *B, *F, *C, *D, *G);
-  bench_timer_stop();
-  bench_timer_print();
+  int	numtasks, taskid, numworkers, source;
+  int dest;
+  int count_ni, count_nl, count_ni_left, count_nl_left;
+  int offset_i, offset_l;
+  int rows_ni, cols_nl;
+  int i, j, k, rc;
 
-  if (argc > 42 && ! strcmp(argv[0], "")) print_array(ni, nl, *G);
+  MPI_Status status;
+  MPI_Init(&argc,&argv);
+  MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
+  MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
 
-  free((void*)E);
-  free((void*)A);
-  free((void*)B);
-  free((void*)F);
-  free((void*)C);
-  free((void*)D);
-  free((void*)G);
+  numworkers = numtasks - 1;
+  
 
+  if (taskid == 0) {
+    init_array (ni, nj, nk, nl, nm, *A, *B, *C, *D);
+    bench_timer_start();
+
+    count_ni = ni / numworkers;
+    count_nl = nl / numworkers;
+    count_ni_left = ni % numworkers;
+    count_nl_left = nl % numworkers;
+
+    offset_i = 0;
+    offset_l = 0;
+    
+    for (dest = 1; dest <= numworkers; ++dest) {
+      rows_ni = (dest <= count_ni_left) ? count_ni + 1 : count_ni;
+      cols_nl = (dest <= count_nl_left) ? count_nl + 1 : count_nl;
+
+      MPI_Send(&offset_i, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(&offset_l, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(&rows_ni, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(&cols_nl, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(&(*A)[offset_i][0], rows_ni * nk, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(B, nk * nj, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(C, nj*nm, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(&(*D)[0][offset_l], nm * cols_nl, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
+
+      offset_i += rows_ni;
+      offset_l += cols_nl;
+    }
+
+    /* wait for results from all worker tasks */
+    for (i=1; i<=numworkers; ++i) {
+      source = i;
+      MPI_Recv(&offset_i, 1, MPI_INT, source, 2, MPI_COMM_WORLD, &status);
+      MPI_Recv(&offset_l, 1, MPI_INT, source, 2, MPI_COMM_WORLD, &status);
+      MPI_Recv(&rows_ni, 1, MPI_INT, source, 2, MPI_COMM_WORLD, &status);
+      MPI_Recv(&cols_nl, 1, MPI_INT, source, 2, MPI_COMM_WORLD, &status);
+      MPI_Recv(&(*G)[offset_i][offset_l], rows_ni * cols_nl, MPI_DOUBLE, source, 2, MPI_COMM_WORLD, &status);
+    }
+
+    bench_timer_stop();
+    bench_timer_print();
+
+    if (argc > 42 && ! strcmp(argv[0], "")) print_array(ni, nl, *G);
+
+    free((void*)E);
+    free((void*)A);
+    free((void*)B);
+    free((void*)F);
+    free((void*)C);
+    free((void*)D);
+    free((void*)G);
+  }
+  
+  if (taskid > 0) {
+    MPI_Recv(&offset_i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(&offset_l, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(&rows_ni, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(&cols_nl, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(A, rows_ni * nk, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(B, nk * nj, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(C, nj * nm, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(D, nm * cols_nl, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD, &status);
+
+    kernel_3mm_bl (rows_ni, nj, nk, cols_nl, nm, *E, *A, *B, *F, *C, *D, *G);
+
+    MPI_Send(&offset_i, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
+    MPI_Send(&offset_l, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
+    MPI_Send(&rows_ni, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
+    MPI_Send(&cols_nl, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
+    MPI_Send(G, rows_ni*cols_nl, MPI_DOUBLE, 0, 2, MPI_COMM_WORLD);
+  }
+  MPI_Finalize();
   return 0;
 }
