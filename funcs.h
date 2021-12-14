@@ -1,13 +1,7 @@
-#pragma once
-
-/* Include benchmark-specific header. */
 #include <omp.h>
-
 #include "3mm.h"
 
 double bench_t_start, bench_t_end;
-
-// setenv OMP_NESTED true
 
 static
 double rtclock() {
@@ -32,24 +26,12 @@ void bench_timer_print() {
   printf ("Time in seconds = %0.6lf\n", bench_t_end - bench_t_start);
 }
 
-// static
-// void init_(int ni, int nk, double A[ ni][nk], int start) {
-//   for (int i = start; i < ni + start; i++) {
-//     for (int j = start * 2; j < nk + start * 2; j++) {
-//       A[i - start][j - start * 2] = (double) ((i*j+1) % ni) / (nk * 5) + rand() % 10;
-//     }
-//   }
-// }
-
 static
 void init_array(int ni, int nj, int nk, int nl, int nm,
                 double A[ ni][nk], double B[ nk][nj],
-                double C[ nj][nm], double D[ nm][nl])
-{
+                double C[ nj][nm], double D[ nm][nl]) {
   int i, j;
-
-  #pragma omp parallel shared(A) private(i, j)
-  {
+  #pragma omp parallel shared(A) private(i, j) {
     #pragma omp for
     for (i = 0; i < ni; i++) {
       for (j = 0; j < nk; j++) {
@@ -58,8 +40,7 @@ void init_array(int ni, int nj, int nk, int nl, int nm,
     }
   }
 
-  #pragma omp parallel shared(B) private(i, j)
-  {
+  #pragma omp parallel shared(B) private(i, j) {
     #pragma omp for
     for (i = 0; i < nk; i++) {
       for (j = 0; j < nj; j++) {
@@ -107,7 +88,7 @@ void print_array(int ni, int nl, double G[ ni][nl]) {
   fprintf(stderr, "==END   DUMP_ARRAYS==\n");
 }
 
-void sum(int nl, int nr, double A[ nl][nr], double B[ nl][nr], double Res[nl][nr]) {
+void sum(int nl, int nr, double A[nl][nr], double B[nl][nr], double Res[nl][nr]) {
   for (int i = 0; i < nl; ++i) {
     for (int k = 0; k < nr; ++k) {
       Res[i][k] = A[i][k] + B[i][k];

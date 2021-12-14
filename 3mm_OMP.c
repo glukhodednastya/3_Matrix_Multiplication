@@ -1,7 +1,5 @@
 #include <omp.h>
-
 #include "3mm.h"
-
 #include "funcs.h"
 
 void add(int nl, int nr, double A[ nl][nr], double Res[nl][nr]) {
@@ -12,10 +10,9 @@ void add(int nl, int nr, double A[ nl][nr], double Res[nl][nr]) {
   }
 }
 
-void usual_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], double Res[nl][nr]) {
+void usual_mult(int nl, int nc, int nr, double A[nl][nc], double B[nc][nr], double Res[nl][nr]) {
   int i, j, k;
-  #pragma omp parallel default(shared) private(i, j, k)
-  {
+  #pragma omp parallel default(shared) private(i, j, k) {
     #pragma omp for
     for (i = 0; i < nl; i++) {
       for (j = 0; j < nr; j++) {
@@ -29,37 +26,33 @@ void usual_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], do
 }
 
 
-void block_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], double Res[nl][nr]) {
+void block_mult(int nl, int nc, int nr, double A[nl][nc], double B[nc][nr], double Res[nl][nr]) {
   int A_ln_size = 200;
   int c_size = 200;
   int B_cols_size = 200;
-
-  int lines_am = nl / A_ln_size + (nl % A_ln_size != 0);
-  int cols_am = nr / B_cols_size + (nr % B_cols_size != 0);
-  int res_c_size = nc / c_size + (nc % c_size != 0);
-
+  int lines = nl / A_ln_size + (nl % A_ln_size != 0);
+  int cols = nr / B_cols_size + (nr % B_cols_size != 0);
+  int res_size = nc / c_size + (nc % c_size != 0);
   int i, k;
-
-  #pragma omp parallel default(shared) private(i, k)
-  {
+  #pragma omp parallel default(shared) private(i, k) {
     #pragma omp for
-    for (i = 0; i < lines_am; ++i) {
-      for (k = 0; k < cols_am; ++k) {
+    for (i = 0; i < lines; ++i) {
+      for (k = 0; k < cols; ++k) {
         int ln = nl - A_ln_size * i > A_ln_size ? A_ln_size : nl - A_ln_size * i;
         int cl = nr - B_cols_size * k > B_cols_size ? B_cols_size : nr - B_cols_size * k;
 
-        double (*temp)[ln][cl]; temp = (double(*)[ln][cl])malloc ((ln) * (cl) * sizeof(double));
+        double (*temp)[ln][cl]; temp = (double(*)[ln][cl]) malloc ((ln) * (cl) * sizeof(double));
 		
         for (int s = 0; s < ln; ++s) {
           for (int j = 0; j < cl; ++j) {
             (*temp)[s][j] = 0;
           }
         }
-        for (int s = 0; s < res_c_size; ++s) {
+        for (int s = 0; s < res_size; ++s) {
 			
           int cs = nc - c_size * s > c_size ? c_size : nc - c_size * s;
-          double (*temp_A)[ln][cs]; temp_A = (double(*)[ln][cs])malloc ((ln) * (cs) * sizeof(double));
-          double (*temp_B)[cs][cl]; temp_B = (double(*)[cs][cl])malloc ((cs) * (cl) * sizeof(double));
+          double (*temp_A)[ln][cs]; temp_A = (double(*)[ln][cs]) malloc ((ln) * (cs) * sizeof(double));
+          double (*temp_B)[cs][cl]; temp_B = (double(*)[cs][cl]) malloc ((cs) * (cl) * sizeof(double));
 		  
           for (int r = 0; r < ln; ++r) {
             for (int g = 0; g < cs; ++g) {
@@ -92,7 +85,6 @@ void kernel_3mm_bl(int ni, int nj, int nk, int nl, int nm,
                    double B[ nk][nj], double F[ nj][nl],
                    double C[ nj][nm], double D[ nm][nl],
                    double G[ ni][nl]) {
-  
   block_mult(ni, nk, nj, A, B, E);
   block_mult(nj, nm, nl, C, D, F);
   block_mult(ni, nj, nl, E, F, G);
@@ -114,11 +106,8 @@ int main(int argc, char** argv) {
   double (*G)[ni][nl]; G = (double(*)[ni][nl])malloc ((ni) * (nl) * sizeof(double));
 
   init_array (ni, nj, nk, nl, nm, *A, *B, *C, *D);
-
   bench_timer_start();
-
   kernel_3mm_bl (ni, nj, nk, nl, nm, *E, *A, *B, *F, *C, *D, *G);
-
   bench_timer_stop();
   bench_timer_print();
 

@@ -10,10 +10,9 @@ void add(int nl, int nr, double A[ nl][nr], double Res[nl][nr]) {
   }
 }
 
-void usual_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], double Res[nl][nr]) {
+void usual_mult(int nl, int nc, int nr, double A[nl][nc], double B[nc][nr], double Res[nl][nr]) {
   int i, j, k;
-  #pragma omp parallel default(shared) private(i, j, k)
-  {
+  #pragma omp parallel default(shared) private(i, j, k) {
     #pragma omp for
     for (i = 0; i < nl; i++) {
       for (j = 0; j < nr; j++) {
@@ -26,25 +25,22 @@ void usual_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], do
   }
 }
 
-void block_mult(int nl, int nc, int nr, double A[ nl][nc], double B[ nc][nr], double Res[nl][nr]) {
+void block_mult(int nl, int nc, int nr, double A[nl][nc], double B[nc][nr], double Res[nl][nr]) {
   int A_ln_size = 200;
   int c_size = 200;
   int B_cols_size = 200;
-  int lines_am = nl / A_ln_size + (nl % A_ln_size != 0);
-  int cols_am = nr / B_cols_size + (nr % B_cols_size != 0);
+  int lines = nl / A_ln_size + (nl % A_ln_size != 0);
+  int cols = nr / B_cols_size + (nr % B_cols_size != 0);
   int res_c_size = nc / c_size + (nc % c_size != 0);
-
   int i, k;
-
-  #pragma omp parallel default(shared) private(i, k)
-  {
+  #pragma omp parallel default(shared) private(i, k) {
     #pragma omp for
-    for (i = 0; i < lines_am; ++i) {
-      for (k = 0; k < cols_am; ++k) {
+    for (i = 0; i < lines; ++i) {
+      for (k = 0; k < cols; ++k) {
         int ln = nl - A_ln_size * i > A_ln_size ? A_ln_size : nl - A_ln_size * i;
         int cl = nr - B_cols_size * k > B_cols_size ? B_cols_size : nr - B_cols_size * k;
 
-        double (*temp)[ln][cl]; temp = (double(*)[ln][cl])malloc ((ln) * (cl) * sizeof(double));
+        double (*temp)[ln][cl]; temp = (double(*)[ln][cl]) malloc ((ln) * (cl) * sizeof(double));
         for (int s = 0; s < ln; ++s) {
           for (int j = 0; j < cl; ++j) {
             (*temp)[s][j] = 0;
@@ -106,8 +102,8 @@ int main(int argc, char** argv) {
   double (*D)[nm][nl]; D = (double(*)[nm][nl])malloc ((nm) * (nl) * sizeof(double));
   double (*G)[ni][nl]; G = (double(*)[ni][nl])malloc ((ni) * (nl) * sizeof(double));
 
-  int	numtasks, taskid, numworkers, source;
-  int dest;
+  int numtasks, id, num, source;
+  int dist;
   int count_ni, count_nl, count_ni_left, count_nl_left;
   int offset_i, offset_l;
   int rows_ni, cols_nl;
@@ -115,43 +111,41 @@ int main(int argc, char** argv) {
 
   MPI_Status status;
   MPI_Init(&argc,&argv);
-  MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
+  MPI_Comm_rank(MPI_COMM_WORLD, &id);
   MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
 
-  numworkers = numtasks - 1;
+  num = numtasks - 1;
   
-
-  if (taskid == 0) {
+  if (id == 0) {
     init_array (ni, nj, nk, nl, nm, *A, *B, *C, *D);
     bench_timer_start();
 
-    count_ni = ni / numworkers;
-    count_nl = nl / numworkers;
-    count_ni_left = ni % numworkers;
-    count_nl_left = nl % numworkers;
+    count_ni = ni / num;
+    count_nl = nl / num;
+    count_ni_left = ni % num;
+    count_nl_left = nl % num;
 
     offset_i = 0;
     offset_l = 0;
     
-    for (dest = 1; dest <= numworkers; ++dest) {
-      rows_ni = (dest <= count_ni_left) ? count_ni + 1 : count_ni;
-      cols_nl = (dest <= count_nl_left) ? count_nl + 1 : count_nl;
+    for (dist = 1; dist <= num; ++dist) {
+      rows_ni = (dist <= count_ni_left) ? count_ni + 1 : count_ni;
+      cols_nl = (dist <= count_nl_left) ? count_nl + 1 : count_nl;
 
-      MPI_Send(&offset_i, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(&offset_l, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(&rows_ni, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(&cols_nl, 1, MPI_INT, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(&(*A)[offset_i][0], rows_ni * nk, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(B, nk * nj, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(C, nj*nm, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
-      MPI_Send(&(*D)[0][offset_l], nm * cols_nl, MPI_DOUBLE, dest, 1, MPI_COMM_WORLD);
+      MPI_Send(&offset_i, 1, MPI_INT, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(&offset_l, 1, MPI_INT, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(&rows_ni, 1, MPI_INT, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(&cols_nl, 1, MPI_INT, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(&(*A)[offset_i][0], rows_ni * nk, MPI_DOUBLE, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(B, nk * nj, MPI_DOUBLE, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(C, nj*nm, MPI_DOUBLE, dist, 1, MPI_COMM_WORLD);
+      MPI_Send(&(*D)[0][offset_l], nm * cols_nl, MPI_DOUBLE, dist, 1, MPI_COMM_WORLD);
 
       offset_i += rows_ni;
       offset_l += cols_nl;
     }
 
-    /* wait for results from all worker tasks */
-    for (i=1; i<=numworkers; ++i) {
+    for (i = 1; i <= num; ++i) {
       source = i;
       MPI_Recv(&offset_i, 1, MPI_INT, source, 2, MPI_COMM_WORLD, &status);
       MPI_Recv(&offset_l, 1, MPI_INT, source, 2, MPI_COMM_WORLD, &status);
@@ -174,7 +168,7 @@ int main(int argc, char** argv) {
     free((void*)G);
   }
   
-  if (taskid > 0) {
+  if (id > 0) {
     MPI_Recv(&offset_i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
     MPI_Recv(&offset_l, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
     MPI_Recv(&rows_ni, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);

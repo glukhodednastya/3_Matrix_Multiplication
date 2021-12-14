@@ -1,11 +1,9 @@
-/* Include benchmark-specific header. */
 #include "3mm.h"
 
 double bench_t_start, bench_t_end;
 
 static
-double rtclock()
-{
+double rtclock() {
     struct timeval Tp;
     int stat;
     stat = gettimeofday (&Tp, NULL);
@@ -14,27 +12,24 @@ double rtclock()
     return (Tp.tv_sec + Tp.tv_usec * 1.0e-6);
 }
 
-void bench_timer_start()
-{
+void bench_timer_start() {
   bench_t_start = rtclock ();
 }
 
-void bench_timer_stop()
-{
+void bench_timer_stop() {
   bench_t_end = rtclock ();
 }
 
-void bench_timer_print()
-{
+void bench_timer_print() {
   printf ("Time in seconds = %0.6lf\n", bench_t_end - bench_t_start);
 }
 
 static
 void init_array(int ni, int nj, int nk, int nl, int nm,
-  double A[ ni][nk],
-  double B[ nk][nj],
-  double C[ nj][nm],
-  double D[ nm][nl])
+  double A[ni][nk],
+  double B[nk][nj],
+  double C[nj][nm],
+  double D[nm][nl])
 {
   int i, j;
 
@@ -54,16 +49,15 @@ void init_array(int ni, int nj, int nk, int nl, int nm,
 
 static
 void print_array(int ni, int nl,
-   double G[ ni][nl])
-{
+   double G[ ni][nl]) {
   int i, j;
 
   fprintf(stderr, "==BEGIN DUMP_ARRAYS==\n");
   fprintf(stderr, "begin dump: %s", "G");
   for (i = 0; i < ni; i++)
     for (j = 0; j < nl; j++) {
- if ((i * ni + j) % 20 == 0) fprintf (stderr, "\n");
- fprintf (stderr, "%0.2lf ", G[i][j]);
+ 	if ((i * ni + j) % 20 == 0) fprintf (stderr, "\n");
+ 	fprintf (stderr, "%0.2lf ", G[i][j]);
     }
   fprintf(stderr, "\nend   dump: %s\n", "G");
   fprintf(stderr, "==END   DUMP_ARRAYS==\n");
@@ -77,8 +71,7 @@ void kernel_3mm(int ni, int nj, int nk, int nl, int nm,
   double F[ nj][nl],
   double C[ nj][nm],
   double D[ nm][nl],
-  double G[ ni][nl])
-{
+  double G[ ni][nl]) {
   int i, j, k;
 
   for (i = 0; i < ni; i++)
@@ -87,14 +80,12 @@ void kernel_3mm(int ni, int nj, int nk, int nl, int nm,
 		for (k = 0; k < nk; ++k)
 			E[i][j] += A[i][k] * B[k][j];
     }
-
   for (i = 0; i < nj; i++)
     for (j = 0; j < nl; j++) {
 		F[i][j] = 0.0;
 		for (k = 0; k < nm; ++k)
 			F[i][j] += C[i][k] * D[k][j];
     }
-
   for (i = 0; i < ni; i++)
     for (j = 0; j < nl; j++) {
 		G[i][j] = 0.0;
@@ -118,23 +109,9 @@ int main(int argc, char** argv) {
   double (*D)[nm][nl]; D = (double(*)[nm][nl])malloc ((nm) * (nl) * sizeof(double));
   double (*G)[ni][nl]; G = (double(*)[ni][nl])malloc ((ni) * (nl) * sizeof(double));
 
-  init_array (ni, nj, nk, nl, nm,
-       *A,
-       *B,
-       *C,
-       *D);
-
+  init_array (ni, nj, nk, nl, nm, *A, *B, *C, *D);
   bench_timer_start();
-
-  kernel_3mm (ni, nj, nk, nl, nm,
-       *E,
-       *A,
-       *B,
-       *F,
-       *C,
-       *D,
-       *G);
-
+  kernel_3mm (ni, nj, nk, nl, nm, *E, *A, *B, *F, *C, *D, *G);
   bench_timer_stop();
   bench_timer_print();
 
